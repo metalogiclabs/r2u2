@@ -264,6 +264,7 @@ def cli(
     scq_constant: int,
     enable_booleanizer: bool,
     enable_aux: bool,
+    enable_input_contract: bool,
     enable_cse: bool,
     enable_rewrite: bool,
     enable_extops: bool,
@@ -351,7 +352,7 @@ def cli(
     script_lines.append("remove_extended_operators")
 
     if output_filename:
-        script_lines.append(f"assemble {'--aux' if enable_aux else '--no-aux'} {'--print' if not quiet else ''} {'--scq-constant ' + str(scq_constant) if scq_constant > 0 else ''} {output_filename}")
+        script_lines.append(f"assemble {'--aux' if enable_aux else '--no-aux'} {'--input-contract' if enable_input_contract else ''} {'--print' if not quiet else ''} {'--scq-constant ' + str(scq_constant) if scq_constant > 0 else ''} {output_filename}")
 
     if write_bounds_filename:
         bounds_path = pathlib.Path(write_bounds_filename)
@@ -400,6 +401,7 @@ def main_rs(
         output_filename=output_filename if output_filename != "" else None,
         write_bounds_filename=write_bounds_filename if write_bounds_filename != "" else None,
         enable_aux=enable_aux,
+        enable_input_contract=False,
         enable_booleanizer=enable_booleanizer,
         enable_cse=enable_cse,
         check_sat=enable_sat,

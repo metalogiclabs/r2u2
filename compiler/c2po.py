@@ -128,6 +128,12 @@ parser.add_argument(
     help="enable aux data (e.g., contract status and specification naming)",
 )
 parser.add_argument(
+    "--input-contract",
+    action="store_true",
+    default=False,
+    help="embed a strict, position-bound CSV signal-name and type contract",
+)
+parser.add_argument(
     "--cse", 
     action=argparse.BooleanOptionalAction, 
     default=True,
@@ -275,6 +281,7 @@ elif args.spec or args.formula:
             scq_constant=args.scq_constant,
             enable_booleanizer=args.booleanizer,
             enable_aux=args.aux,
+            enable_input_contract=args.input_contract,
             enable_cse=args.cse,
             enable_rewrite=args.rewrite,
             enable_extops=args.extops,

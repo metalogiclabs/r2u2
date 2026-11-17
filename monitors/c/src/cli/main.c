@@ -85,10 +85,15 @@ int main(int argc, char *argv[]) {
 
   // Configure R2U2 monitor
   r2u2_monitor_t r2u2_monitor = R2U2_DEFAULT_MONITOR;
-  r2u2_load_specification(spec, &r2u2_monitor);
-
-  if (munmap(spec, (size_t)fd_stat.st_size) != 0) {
-    perror("Spec memory mapping did not close cleanly");
+  if (r2u2_csv_configure_contract(&r2u2_csv_reader, spec,
+        (size_t)fd_stat.st_size) != R2U2_OK) {
+    munmap(spec, (size_t)fd_stat.st_size);
+    return 1;
+  }
+  if (r2u2_load_specification(spec, &r2u2_monitor) != R2U2_OK) {
+    munmap(spec, (size_t)fd_stat.st_size);
+    fprintf(stderr, "Invalid specification: cannot configure monitor\n");
+    return 1;
   }
 
   // Open output File
@@ -144,6 +149,11 @@ int main(int argc, char *argv[]) {
   if (err_cond != R2U2_OK) {
     /* Prints R2U2 Status string if built with debugging enabled */
     R2U2_DEBUG_PRINT("%s\n", r2u2_status_string(err_cond));
+  }
+
+  // Input-column names point into this mapping throughout CSV processing.
+  if (munmap(spec, (size_t)fd_stat.st_size) != 0) {
+    perror("Spec memory mapping did not close cleanly");
   }
 
   return (int) err_cond;

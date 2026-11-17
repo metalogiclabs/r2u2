@@ -42,6 +42,52 @@ Each auxiliary statement is a UTF-8 encoded, null-terminated, string starting wi
 
 These are intentionally structured to be easy to parse with `scanf` by first switching case based on the leading character then using a type appropriate format string to extract the remaining field values.
 
+### Optional SIG1 CSV input contract (experimental)
+
+The C2PO command-line option `--input-contract` adds a versioned CSV input
+contract after the existing instruction and auxiliary-string terminators. The
+normal binary format is unchanged unless this option is supplied. The header
+includes ` SIG1` so the C reference CLI knows that the trailer is mandatory;
+it rejects a missing or malformed trailer instead of silently using legacy
+positional parsing.
+
+The new trailer has the following byte layout, in network (big-endian) order:
+
+```
+uint16 column_count
+repeated column_count times:
+    uint8  type_tag       # 'B' bool, 'I' signed 32-bit integer, 'F' finite double
+    uint16 signal_name_length
+    uint8[signal_name_length] signal_name_utf8
+uint32 payload_length     # bytes from column_count through last signal_name
+uint8[8] "R2U2SIG1"
+```
+
+Compilation with `--input-contract` requires a unique declared, scalar signal
+at every used CSV index. Unnamed holes, ambiguous same-index mappings, or
+undeclared/unsupported column types cause compilation to fail. The C reference
+CLI requires an initial named CSV header with the exact count and source-name
+order. It validates the complete physical record (including embedded NULs),
+all fields and every typed token before advancing the monitor. Boolean values
+are `0` or `1`; integers must be in signed 32-bit range; floats must parse
+completely to finite doubles. Headerless and malformed input produces an error,
+not a verdict. For example:
+
+```
+python3 compiler/c2po.py --spec example.c2po --trace example.csv \
+    --input-contract --output example.bin
+monitors/c/build/r2u2 example.bin example.csv
+```
+
+Legacy binaries without a ` SIG1` header are still accepted with their
+original CSV behavior. Since they do not contain source signal names, their
+name/order correspondence **cannot be established from the binary alone**.
+The new trailer establishes agreement with the *compiler-declared* mapping;
+it does not independently validate mission requirements, prove compiler
+correctness, or authenticate the origin of an externally supplied binary.
+Embedded Rust and other monitor loaders are not automatically given the new
+CLI-side input validation; they continue to interpret the instruction bytes.
+
 ## Example Layout
 A rough outline of the complete layout:
 ```

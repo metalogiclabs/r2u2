@@ -1014,6 +1014,52 @@ def pack_aliases(program: cpt.Program, context: cpt.Context, options: dict[str, 
 
     return (aliases, binary)
 
+
+def pack_input_contract(context: cpt.Context) -> Optional[bytes]:
+    """Encode an unambiguous CSV contract without changing legacy instructions.
+
+    Each column has exactly one declared source name and a known scalar type.
+    Ambiguous aliases, holes and undeclared columns must be resolved by the
+    specification author rather than silently guessed by the monitor.
+    """
+    mapping = context.signal_mapping
+    width = max(mapping.values(), default=-1) + 1
+    if not 1 <= width <= 256:
+        log.error("input contract requires between 1 and 256 CSV columns")
+        return None
+
+    columns: list[Optional[tuple[str, bytes]]] = [None] * width
+    for name, index in mapping.items():
+        if index < 0 or index >= width or columns[index] is not None:
+            log.error(f"input contract has an ambiguous or invalid column for '{name}'")
+            return None
+        signal_type = context.signals.get(name)
+        if types.is_bool_type(signal_type):
+            tag = "B"
+        elif isinstance(signal_type, (types.IntType, types.EnumType)):
+            tag = "I"
+        elif types.is_float_type(signal_type):
+            tag = "F"
+        else:
+            log.error(f"input contract cannot establish scalar type for '{name}'")
+            return None
+        encoded = name.encode("utf-8")
+        if not encoded or len(encoded) > 65535 or b"\x00" in encoded:
+            log.error(f"invalid input contract signal name '{name}'")
+            return None
+        columns[index] = (tag, encoded)
+
+    if any(column is None for column in columns):
+        log.error("input contract requires an explicitly named, typed signal at every index")
+        return None
+
+    payload = CStruct(">H").pack(width)
+    for column in columns:
+        assert column is not None
+        tag, name = column
+        payload += tag.encode("ascii") + CStruct(">H").pack(len(name)) + name
+    return payload + CStruct(">I").pack(len(payload)) + b"R2U2SIG1"
+
 def assemble(
     program: cpt.Program, context: cpt.Context, options: dict[str, Any]
 ) -> command.ReturnCode:
@@ -1041,9 +1087,15 @@ def assemble(
         return command.ReturnCode.ASSEMBLY_ERROR
 
     binary = bytes()
-    binary_header = (
-        f"C2PO Version 4.2.4 for R2U2 V4.2.4 - BOM: {ENDIAN}".encode("ascii") + b"\x00"
-    )
+    contract = None
+    if options["input_contract"]:
+        contract = pack_input_contract(context)
+        if contract is None:
+            return command.ReturnCode.ASSEMBLY_ERROR
+    header_text = f"C2PO Version 4.2.4 for R2U2 V4.2.4 - BOM: {ENDIAN}"
+    if contract is not None:
+        header_text += " SIG1"
+    binary_header = header_text.encode("ascii") + b"\x00"
     binary += CStruct("B").pack(len(binary_header) + 1) + binary_header
 
     for instr in assembly:
@@ -1059,6 +1111,11 @@ def assemble(
         binary += b"\x00"
 
     binary += b"\x00"
+
+    # Append after *both* existing terminators so older C/Rust loaders stop
+    # without interpreting the input contract as an auxiliary instruction.
+    if contract is not None:
+        binary += contract
 
     if options["assembly_filename"]:
         with open(options["assembly_filename"], "w") as f:
@@ -1110,7 +1167,15 @@ unsafe_assemble_command = command.Command(
             "type": bool,
             "default": True,
             "choices": None,
-        }
+        },
+        {
+            "name": "input-contract",
+            "description": "Embed a strict, versioned CSV signal-name and type contract",
+            "required": False,
+            "type": bool,
+            "default": False,
+            "choices": None,
+        },
     ],
     func=assemble,
     guards=[
