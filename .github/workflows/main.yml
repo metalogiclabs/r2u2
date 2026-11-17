@@ -64,6 +64,10 @@ jobs:
         cd monitors/rust/r2u2_cli
         cargo build --release
 
+    - name: Test C CLI CSV validation and SIG1 contracts
+      run: |
+        python3 -m unittest discover -s test -p test_cli_csv_validation.py -q
+
     # Disable eqsat-ilp since that requires Gurobi
     - name: Test c2po
       run: |
