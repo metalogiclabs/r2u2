@@ -64,6 +64,9 @@ jobs:
         cd monitors/rust/r2u2_cli
         cargo build --release
 
+    - name: Build sanitized C monitor for CSV contract checks
+      run: make -C monitors/c debug
+
     - name: Test C CLI CSV validation and SIG1 contracts
       run: |
         python3 -m unittest discover -s test -p test_cli_csv_validation.py -q
